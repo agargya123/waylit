@@ -126,14 +126,15 @@ export const weightedNormalizedScoring: ScoringStrategy = {
   },
 }
 
-export function validateInputs(routes: Route[], contexts: RouteContext[], factors: FactorDefinition[], preset: PreferencePreset) {
+function validateInputs(routes: Route[], contexts: RouteContext[], factors: FactorDefinition[], preset: PreferencePreset) {
   if (!Array.isArray(routes)) throw new Error('routes must be an array.')
   if (!Array.isArray(contexts)) throw new Error('contexts must be an array.')
   if (!Array.isArray(factors)) throw new Error('factors must be an array.')
   if (!preset || typeof preset !== 'object') throw new Error('A preference preset is required.')
-  if (typeof preset.id !== 'string' || !preset.id || typeof preset.label !== 'string') throw new Error('Preset id and label must be strings.')
+  if (typeof preset.id !== 'string' || !preset.id || typeof preset.label !== 'string' || !preset.label || typeof preset.description !== 'string') throw new Error('Preset id, label, and description must be strings.')
   if (!routes.length) throw new Error('At least one route is required.')
   if (!Number.isFinite(preset.maxExtraMinutes) || preset.maxExtraMinutes < 0) throw new Error('maxExtraMinutes must be a finite non-negative number.')
+  if (preset.weightOverrides !== undefined && (!preset.weightOverrides || typeof preset.weightOverrides !== 'object' || Array.isArray(preset.weightOverrides))) throw new Error('weightOverrides must be an object keyed by factor ID.')
   const ids = new Set<string>()
   const factorIds = new Set<string>()
   for (const [index, factor] of factors.entries()) {
@@ -158,7 +159,7 @@ export function validateInputs(routes: Route[], contexts: RouteContext[], factor
   }
   const contextById = new Map<string, RouteContext>()
   for (const context of contexts) {
-    if (!context || !context.routeId || !context.factors || typeof context.factors !== 'object' || Array.isArray(context.factors)) throw new Error('Each route context must include a routeId and factors object.')
+    if (!context || typeof context.routeId !== 'string' || !context.routeId || !context.factors || typeof context.factors !== 'object' || Array.isArray(context.factors)) throw new Error('Each route context must include a routeId and factors object.')
     if (contextById.has(context.routeId)) throw new Error(`Duplicate context for route ${context.routeId}.`)
     contextById.set(context.routeId, context)
     if (!ids.has(context.routeId)) throw new Error(`Context references unknown route ${context.routeId}.`)
