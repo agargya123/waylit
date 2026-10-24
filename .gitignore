@@ -3,3 +3,5 @@ dist/
 *.tsbuildinfo
 .testmuai/
 output-*/
+# kane-cli context store: shared through a location, never merged with git
+.context/
