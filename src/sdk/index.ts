@@ -43,9 +43,9 @@ export interface FactorContribution {
   label: string
   value: number
   normalizedValue: number
-  /** Normalized configured weight in the range 0..1. */
+  /** Configured factor or preset weight before normalization. */
   weight: number
-  /** Weighted contribution in the range 0..1. */
+  /** Contribution on the 0..100 score scale. */
   contribution: number
 }
 
@@ -136,12 +136,13 @@ export function validateInputs(routes: Route[], contexts: RouteContext[], factor
   if (!Number.isFinite(preset.maxExtraMinutes) || preset.maxExtraMinutes < 0) throw new Error('maxExtraMinutes must be a finite non-negative number.')
   const ids = new Set<string>()
   const factorIds = new Set<string>()
-  for (const factor of factors) {
-    if (!factor.id || factorIds.has(factor.id)) throw new Error(`Factor ID must be unique and non-empty: ${factor.id}`)
+  for (const [index, factor] of factors.entries()) {
+    if (!factor || typeof factor !== 'object') throw new Error(`Invalid factor definition at index ${index}.`)
+    if (typeof factor.id !== 'string' || !factor.id || factorIds.has(factor.id)) throw new Error(`Factor ID must be unique and non-empty: ${factor.id}`)
     factorIds.add(factor.id)
-    if (!factor.label || !factor.description || !['higher', 'lower'].includes(factor.direction)) throw new Error(`Invalid factor definition for ${factor.id}.`)
+    if (typeof factor.label !== 'string' || !factor.label || typeof factor.description !== 'string' || !factor.description || !['higher', 'lower'].includes(factor.direction)) throw new Error(`Invalid factor definition for ${factor.id}.`)
     if (!Number.isFinite(factor.weight) || factor.weight < 0) throw new Error(`Invalid weight for ${factor.id}.`)
-    if (!Number.isFinite(factor.bounds.min) || !Number.isFinite(factor.bounds.max) || factor.bounds.max <= factor.bounds.min) throw new Error(`Invalid bounds for ${factor.id}.`)
+    if (!factor.bounds || typeof factor.bounds !== 'object' || !Number.isFinite(factor.bounds.min) || !Number.isFinite(factor.bounds.max) || factor.bounds.max <= factor.bounds.min) throw new Error(`Invalid bounds for ${factor.id}.`)
   }
   const weights = factors.map((factor) => preset.weightOverrides?.[factor.id] ?? factor.weight)
   for (const [id, weight] of Object.entries(preset.weightOverrides ?? {})) {
@@ -257,7 +258,7 @@ export function evaluateRoutes(
   const winnerRoute = recommendedRouteId ? routeById.get(recommendedRouteId)! : null
   const explanation = winner && winnerRoute
     ? shortestOnly
-      ? `${winnerRoute.name} was selected from the shortest-duration routes${winner.score === null ? ' by route ID because complete environmental scores were unavailable' : ' using the preference score as a tie-breaker'}. No environmental superiority is implied.`
+      ? `${winnerRoute.name} was selected ${eligible.length === 1 ? 'as the only route within the zero-minute limit' : winner.score === null ? 'by route ID because complete environmental scores were unavailable' : 'by preference score among routes tied for shortest duration'}. No environmental superiority is implied.`
       : `${winnerRoute.name} had the highest preference score among eligible routes and adds ${winner.extraMinutes} minutes over the fastest route.${status === 'provisional' ? ' This comparison is provisional because an eligible alternative has missing weighted observations.' : ''}`
     : 'No eligible route has complete observations for all positively weighted factors.'
 

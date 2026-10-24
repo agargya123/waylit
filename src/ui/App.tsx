@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { evaluateRoutes } from '../sdk'
 import { journeys, presets } from '../sdk/journeys'
+import { RouteEvaluationAssistant } from './EvaluationAssistantView'
 
 export default function App() {
   const [journeyId, setJourneyId] = useState(journeys[0].id)
@@ -45,6 +46,7 @@ export default function App() {
         <aside className="recommendation"><span className="rec-icon">✳</span><div><strong>{recommendation ? `Made for your ${preset.label.toLowerCase()} preference` : 'No recommendation available'}</strong><p>{result.explanation}</p>{result.warnings.map((warning) => <p className="result-warning" key={warning}>{warning}</p>)}</div></aside>
         <p className="disclaimer">{journey.provenance.label}. Route durations, distances and environmental metrics are synthetic estimates; they are not routing-provider results. Endpoint coordinates, when supplied, identify named places only and do not define route geometry. Unknown observations stay unknown.</p>
       </section>
+      <RouteEvaluationAssistant routes={routes} contexts={contexts} factors={factors} />
       <footer><a className="brand footer-brand" href="#top"><span className="brand-mark">w</span> waylit</a><span>Go the way that feels right.</span><span>MADE FOR THE WAY HOME&nbsp; ✳</span></footer>
     </main>
   )
