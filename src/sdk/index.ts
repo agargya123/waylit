@@ -1,4 +1,5 @@
 export type FactorDirection = 'higher' | 'lower'
+export type Observation = number | null
 
 export interface FactorDefinition {
   id: string
@@ -12,7 +13,7 @@ export interface FactorDefinition {
 export interface RouteContext {
   routeId: string
   /** A number is an observation; null explicitly means unknown. Omitted registered factors are also unknown. */
-  factors: Record<string, number | null>
+  factors: Record<string, Observation>
 }
 
 export interface Route {
@@ -30,30 +31,60 @@ export interface PreferencePreset {
   maxExtraMinutes: number
 }
 
+export interface EvaluationInput {
+  routes: Route[]
+  contexts: RouteContext[]
+  factors: FactorDefinition[]
+  preset: PreferencePreset
+}
+
 export interface FactorContribution {
   factorId: string
   label: string
   value: number
   normalizedValue: number
+  /** Normalized configured weight in the range 0..1. */
   weight: number
+  /** Weighted contribution in the range 0..1. */
   contribution: number
 }
 
-export interface RouteScore {
+export type FactorStatus = 'observed' | 'unknown'
+
+export interface FactorResult {
+  factorId: string
+  label: string
+  value: number | null
+  normalizedValue: number | null
+  effectiveWeight: number
+  contribution: number | null
+  status: FactorStatus
+}
+
+export interface RouteResult {
   routeId: string
-  score: number | null
-  eligible: boolean
+  durationMinutes: number
   extraMinutes: number
-  observedFactors: FactorContribution[]
+  eligible: boolean
+  exclusionReasons: string[]
+  score: number | null
+  dataCoverage: number
+  factorResults: FactorResult[]
   missingFactors: string[]
   explanation: string
 }
 
+export type EvaluationStatus = 'recommended' | 'provisional' | 'insufficient_data'
+export type RecommendationBasis = 'preference_score' | 'shortest_duration'
+
 export interface EvaluationResult {
   presetId: string
-  scores: RouteScore[]
-  recommendation: string | null
+  status: EvaluationStatus
+  recommendedRouteId: string | null
+  basis: RecommendationBasis | null
+  routes: RouteResult[]
   explanation: string
+  warnings: string[]
 }
 
 export interface ScoringInput {
@@ -68,10 +99,7 @@ export interface ScoringStrategy {
   score(input: ScoringInput): { score: number | null; observedFactors: FactorContribution[]; missingFactors: string[] }
 }
 
-/** Default strategy. Missing observations are excluded, never imputed, and remaining weights are renormalized.
- * Cross-route comparison uses the observed-only score; exact score ties prefer greater weight coverage,
- * then shorter duration. Explanations always disclose missing factors so scores are not read as certainty.
- */
+/** Default strategy. Missing observations are excluded and remaining weights are renormalized. */
 export const weightedNormalizedScoring: ScoringStrategy = {
   id: 'weighted-normalized',
   score({ context, factors, preset }) {
@@ -99,6 +127,11 @@ export const weightedNormalizedScoring: ScoringStrategy = {
 }
 
 export function validateInputs(routes: Route[], contexts: RouteContext[], factors: FactorDefinition[], preset: PreferencePreset) {
+  if (!Array.isArray(routes)) throw new Error('routes must be an array.')
+  if (!Array.isArray(contexts)) throw new Error('contexts must be an array.')
+  if (!Array.isArray(factors)) throw new Error('factors must be an array.')
+  if (!preset || typeof preset !== 'object') throw new Error('A preference preset is required.')
+  if (typeof preset.id !== 'string' || !preset.id || typeof preset.label !== 'string') throw new Error('Preset id and label must be strings.')
   if (!routes.length) throw new Error('At least one route is required.')
   if (!Number.isFinite(preset.maxExtraMinutes) || preset.maxExtraMinutes < 0) throw new Error('maxExtraMinutes must be a finite non-negative number.')
   const ids = new Set<string>()
@@ -114,14 +147,17 @@ export function validateInputs(routes: Route[], contexts: RouteContext[], factor
   for (const [id, weight] of Object.entries(preset.weightOverrides ?? {})) {
     if (!factorIds.has(id) || !Number.isFinite(weight) || weight! < 0) throw new Error(`Invalid weight override for ${id}.`)
   }
-  if (!weights.some((weight) => Number.isFinite(weight) && weight > 0)) throw new Error('Total factor weight must be greater than zero.')
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) throw new Error('Total factor weight must be finite and greater than zero.')
   for (const route of routes) {
-    if (!route.id || ids.has(route.id)) throw new Error(`Route ID must be unique and non-empty: ${route.id}`)
+    if (!route || typeof route.id !== 'string' || !route.id || ids.has(route.id)) throw new Error(`Route ID must be unique and non-empty: ${route?.id}`)
+    if (typeof route.name !== 'string' || typeof route.description !== 'string') throw new Error(`Route name and description must be strings: ${route.id}.`)
     ids.add(route.id)
     if (!Number.isFinite(route.durationMinutes) || route.durationMinutes <= 0) throw new Error(`Invalid duration for route ${route.id}.`)
   }
   const contextById = new Map<string, RouteContext>()
   for (const context of contexts) {
+    if (!context || !context.routeId || !context.factors || typeof context.factors !== 'object' || Array.isArray(context.factors)) throw new Error('Each route context must include a routeId and factors object.')
     if (contextById.has(context.routeId)) throw new Error(`Duplicate context for route ${context.routeId}.`)
     contextById.set(context.routeId, context)
     if (!ids.has(context.routeId)) throw new Error(`Context references unknown route ${context.routeId}.`)
@@ -135,33 +171,95 @@ export function validateInputs(routes: Route[], contexts: RouteContext[], factor
 }
 
 export function evaluateRoutes(
-  routes: Route[], contexts: RouteContext[], factors: FactorDefinition[], preset: PreferencePreset,
+  input: EvaluationInput,
   strategy: ScoringStrategy = weightedNormalizedScoring,
 ): EvaluationResult {
+  if (!input || typeof input !== 'object') throw new Error('An evaluation input object is required.')
+  const { routes, contexts, factors, preset } = input
   const contextById = validateInputs(routes, contexts, factors, preset)
   const shortest = Math.min(...routes.map((route) => route.durationMinutes))
-  const scores = routes.map((route) => {
+  const totalWeight = factors.reduce((sum, factor) => sum + (preset.weightOverrides?.[factor.id] ?? factor.weight), 0)
+  const routeResults: RouteResult[] = routes.map((route) => {
     const extraMinutes = route.durationMinutes - shortest
     const eligible = extraMinutes <= preset.maxExtraMinutes
-    const result = strategy.score({ route, context: contextById.get(route.id) ?? { routeId: route.id, factors: {} }, factors, preset })
-    const top = [...result.observedFactors].sort((a, b) => b.contribution - a.contribution)[0]
-    const known = result.observedFactors.map((factor) => factor.label)
-    const unknown = result.missingFactors.map((id) => factors.find((factor) => factor.id === id)!.label)
-    const explanation = `${route.name} has ${known.length ? `known ${known.join(', ').toLowerCase()} data` : 'no known factor data'}${top ? `; ${top.label.toLowerCase()} contributes most` : ''}${unknown.length ? `. Unknown: ${unknown.join(', ')}.` : '.'}`
-    return { routeId: route.id, score: result.score, eligible, extraMinutes, observedFactors: result.observedFactors, missingFactors: result.missingFactors, explanation }
-  })
-  const eligible = scores.filter((score) => score.eligible && score.score !== null)
-  eligible.sort((a, b) => (b.score! - a.score!) || (coverage(b, factors, preset) - coverage(a, factors, preset)) || (routes.find((route) => route.id === a.routeId)!.durationMinutes - routes.find((route) => route.id === b.routeId)!.durationMinutes))
-  const recommendation = eligible[0]?.routeId ?? null
-  const winner = recommendation ? scores.find((score) => score.routeId === recommendation)! : null
-  const explanation = winner
-    ? `${routes.find((route) => route.id === recommendation)!.name} is the best eligible match for ${preset.label.toLowerCase()} with a score of ${winner.score!.toFixed(0)} out of 100. ${winner.explanation}`
-    : 'No eligible route has known factor observations to compare.'
-  return { presetId: preset.id, scores, recommendation, explanation }
-}
+    if (!eligible) {
+      return {
+        routeId: route.id,
+        durationMinutes: route.durationMinutes,
+        extraMinutes,
+        eligible,
+        exclusionReasons: [`Exceeds the ${preset.maxExtraMinutes}-minute maximum detour.`],
+        score: null,
+        dataCoverage: 0,
+        factorResults: [],
+        missingFactors: [],
+        explanation: `${route.name} exceeds the maximum detour and was not scored.`,
+      }
+    }
 
-function coverage(score: RouteScore, factors: FactorDefinition[], preset: PreferencePreset) {
-  const total = factors.reduce((sum, factor) => sum + (preset.weightOverrides?.[factor.id] ?? factor.weight), 0)
-  const observed = score.observedFactors.reduce((sum, factor) => sum + factor.weight, 0)
-  return total > 0 ? observed / total : 0
+    const context = contextById.get(route.id) ?? { routeId: route.id, factors: {} }
+    const result = strategy.score({ route, context, factors, preset })
+    const observedById = new Map(result.observedFactors.map((factor) => [factor.factorId, factor]))
+    const factorResults = factors.map((factor): FactorResult => {
+      const value = context.factors[factor.id]
+      const observed = observedById.get(factor.id)
+      const effectiveWeight = (preset.weightOverrides?.[factor.id] ?? factor.weight) / totalWeight
+      if (value === null || value === undefined || !observed) {
+        return { factorId: factor.id, label: factor.label, value: null, normalizedValue: null, effectiveWeight, contribution: null, status: 'unknown' }
+      }
+      return { factorId: factor.id, label: factor.label, value, normalizedValue: observed.normalizedValue, effectiveWeight, contribution: observed.normalizedValue * effectiveWeight, status: 'observed' }
+    })
+    const missingFactors = factorResults.filter((factor) => factor.status === 'unknown').map((factor) => factor.factorId)
+    const hasMissingWeightedFactor = factorResults.some((factor) => factor.status === 'unknown' && factor.effectiveWeight > 0)
+    const score = hasMissingWeightedFactor ? null : result.score
+    const dataCoverage = factorResults.reduce((sum, factor) => sum + (factor.status === 'observed' ? factor.effectiveWeight : 0), 0)
+    const unknownLabels = factorResults.filter((factor) => factor.status === 'unknown').map((factor) => factor.label)
+    const explanation = unknownLabels.length
+      ? `${route.name} has unknown ${unknownLabels.join(', ').toLowerCase()} data${hasMissingWeightedFactor ? '; its weighted score is unavailable' : ''}.`
+      : `${route.name} has observations for all positively weighted factors.`
+    return { routeId: route.id, durationMinutes: route.durationMinutes, extraMinutes, eligible, exclusionReasons: [], score, dataCoverage, factorResults, missingFactors, explanation }
+  })
+
+  const eligible = routeResults.filter((route) => route.eligible)
+  const complete = eligible.filter((route) => route.score !== null)
+  const incomplete = eligible.filter((route) => route.score === null)
+  const shortestOnly = preset.maxExtraMinutes === 0
+  const routeById = new Map(routes.map((route) => [route.id, route]))
+  const byScore = (a: RouteResult, b: RouteResult) =>
+    (b.score! - a.score!) ||
+    (a.durationMinutes - b.durationMinutes) ||
+    (a.routeId < b.routeId ? -1 : a.routeId > b.routeId ? 1 : 0)
+  complete.sort(byScore)
+
+  let recommendedRouteId: string | null = null
+  let basis: RecommendationBasis | null = null
+  let status: EvaluationStatus
+  if (complete.length) {
+    recommendedRouteId = complete[0].routeId
+    basis = shortestOnly ? 'shortest_duration' : 'preference_score'
+    status = incomplete.length ? 'provisional' : 'recommended'
+  } else if (shortestOnly) {
+    eligible.sort((a, b) => a.routeId < b.routeId ? -1 : a.routeId > b.routeId ? 1 : 0)
+    recommendedRouteId = eligible[0]?.routeId ?? null
+    basis = recommendedRouteId ? 'shortest_duration' : null
+    status = recommendedRouteId ? 'provisional' : 'insufficient_data'
+  } else {
+    status = 'insufficient_data'
+  }
+
+  const warnings: string[] = []
+  if (incomplete.length) warnings.push('One or more eligible routes are missing positively weighted observations; the comparison is provisional.')
+  if (!complete.length && shortestOnly && recommendedRouteId) warnings.push('No eligible route has complete environmental observations; the shortest route was selected by duration, then route ID.')
+  if (!complete.length && !shortestOnly) warnings.push('No eligible route has complete observations for all positively weighted factors.')
+  if (routeResults.some((route) => !route.eligible)) warnings.push('Routes outside the maximum detour were excluded before scoring.')
+
+  const winner = recommendedRouteId ? routeResults.find((route) => route.routeId === recommendedRouteId)! : null
+  const winnerRoute = recommendedRouteId ? routeById.get(recommendedRouteId)! : null
+  const explanation = winner && winnerRoute
+    ? shortestOnly
+      ? `${winnerRoute.name} was selected from the shortest-duration routes${winner.score === null ? ' by route ID because complete environmental scores were unavailable' : ' using the preference score as a tie-breaker'}. No environmental superiority is implied.`
+      : `${winnerRoute.name} had the highest preference score among eligible routes and adds ${winner.extraMinutes} minutes over the fastest route.${status === 'provisional' ? ' This comparison is provisional because an eligible alternative has missing weighted observations.' : ''}`
+    : 'No eligible route has complete observations for all positively weighted factors.'
+
+  return { presetId: preset.id, status, recommendedRouteId, basis, routes: routeResults, explanation, warnings }
 }

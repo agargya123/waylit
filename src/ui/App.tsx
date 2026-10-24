@@ -5,8 +5,8 @@ import { contexts, factors, presets, routes } from '../sdk/example'
 export default function App() {
   const [presetId, setPresetId] = useState(presets[0].id)
   const preset = presets.find((item) => item.id === presetId)!
-  const result = useMemo(() => evaluateRoutes(routes, contexts, factors, preset), [preset])
-  const recommendation = routes.find((route) => route.id === result.recommendation)
+  const result = useMemo(() => evaluateRoutes({ routes, contexts, factors, preset }), [preset])
+  const recommendation = routes.find((route) => route.id === result.recommendedRouteId)
 
   return (
     <main className="shell">
@@ -29,13 +29,13 @@ export default function App() {
         </div>
         <div className="route-list">
           {routes.map((route, index) => {
-            const score = result.scores.find((item) => item.routeId === route.id)!
-            const isRecommended = result.recommendation === route.id
+            const score = result.routes.find((item) => item.routeId === route.id)!
+            const isRecommended = result.recommendedRouteId === route.id
             return <article className={`route-card ${isRecommended ? 'recommended' : ''}`} key={route.id}>
               <div className="route-top"><div className="route-number">0{index + 1}</div><div className="route-title"><div className="route-name">{route.name}{isRecommended && <span className="best-badge">BEST MATCH</span>}</div><p>{route.description}</p></div><div className="route-time"><strong>{route.durationMinutes}</strong><span>min</span></div></div>
               <div className="route-meta"><span>✦ {score.score === null ? 'Not enough data' : `${Math.round(score.score)} match`}</span><span>{score.eligible ? `+${score.extraMinutes} min vs. fastest` : `Outside ${preset.maxExtraMinutes} min detour limit`}</span></div>
               <div className="meter"><span style={{ width: `${score.score ?? 0}%` }} /></div>
-              <div className="factor-row">{score.observedFactors.map((factor) => <span key={factor.factorId} className="factor-chip"><b>{factor.label}</b> {factor.value}{factor.factorId === 'lighting' ? '%' : ''}</span>)}{score.missingFactors.map((id) => <span key={id} className="factor-chip unknown">? {factors.find((factor) => factor.id === id)?.label} unknown</span>)}</div>
+              <div className="factor-row">{score.factorResults.filter((factor) => factor.status === 'observed').map((factor) => <span key={factor.factorId} className="factor-chip"><b>{factor.label}</b> {factor.factorId === 'lighting' ? `${Math.round(factor.value! * 100)}%` : factor.value}</span>)}{score.factorResults.filter((factor) => factor.status === 'unknown').map((factor) => <span key={factor.factorId} className="factor-chip unknown">? {factor.label} unknown</span>)}</div>
             </article>
           })}
         </div>
