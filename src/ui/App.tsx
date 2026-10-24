@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { evaluateRoutes } from '../sdk'
 import { contexts, factors, presets, routes } from '../sdk/example'
+import { RouteEvaluationAssistant } from './EvaluationAssistantView'
 
 export default function App() {
   const [presetId, setPresetId] = useState(presets[0].id)
@@ -42,6 +43,7 @@ export default function App() {
         {recommendation && <aside className="recommendation"><span className="rec-icon">✳</span><div><strong>Made for your {preset.label.toLowerCase()} preference</strong><p>{result.explanation}</p></div></aside>}
         <p className="disclaimer">Route details are sample data. Unknown information stays unknown and is shown as such.</p>
       </section>
+      <RouteEvaluationAssistant routes={routes} contexts={contexts} factors={factors} />
       <footer><a className="brand footer-brand" href="#top"><span className="brand-mark">w</span> waylit</a><span>Go the way that feels right.</span><span>MADE FOR THE WAY HOME&nbsp; ✳</span></footer>
     </main>
   )
