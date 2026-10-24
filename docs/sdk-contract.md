@@ -101,8 +101,8 @@ export interface FactorContribution {
   label: string;
   value: number;
   normalizedValue: number;
-  weight: number;                  // configured factor or preset weight
-  contribution: number;            // contribution reported by the scoring strategy
+  weight: number;                  // configured factor or preset weight, before normalization
+  contribution: number;            // contribution on the 0..100 score scale
 }
 
 export interface ScoringInput {
@@ -145,7 +145,7 @@ The input reuses the existing `Route` and `RouteContext` interfaces rather than 
 ### Constraints and shortest-walk preset
 - Calculate `fastestMinutes = min(routes.durationMinutes)` from the supplied valid routes.
 - Eligibility: `durationMinutes <= fastestMinutes + preset.maxExtraMinutes`. Excluded routes **never** win, regardless of score.
-- `Shortest Walk` preset sets `maxExtraMinutes: 0`, making only routes tied for minimum duration eligible. Select among these by complete score when possible; if none has a complete score, break ties deterministically using route ID. Mark the result's `basis: 'shortest_duration'`, explain that no environmental superiority is implied, and include uncertainty warnings.
+- `Shortest Walk` preset sets `maxExtraMinutes: 0`, making only routes tied for minimum duration eligible. Select among these by complete score when there are multiple eligible routes; if none has a complete score, break ties deterministically using route ID. Mark the result's `basis: 'shortest_duration'`, explain the selection basis accurately, state that no environmental superiority is implied, and include uncertainty warnings.
 - `Better Lighting` preset uses a nonzero detour allowance and higher weighting on the lighting factor. Select highest scored complete route, with tie breaks: shorter duration, then lexicographic ID.
 
 ### Validation

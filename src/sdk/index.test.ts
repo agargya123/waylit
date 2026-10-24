@@ -7,8 +7,14 @@ describe('Waylit SDK', () => {
     const betterLighting = evaluateRoutes({ routes, contexts, factors, preset: presets[0] })
     const shortestWalk = evaluateRoutes({ routes, contexts, factors, preset: presets[1] })
     expect(betterLighting.recommendedRouteId).toBe('route-b')
+    const routeB = betterLighting.routes.find((route) => route.routeId === 'route-b')!
+    expect(routeB.score).toBeCloseTo(95)
+    expect(routeB.factorResults.find((factor) => factor.factorId === 'lighting')).toMatchObject({ normalizedValue: 0.95, effectiveWeight: 0.75 })
+    expect(routeB.factorResults.find((factor) => factor.factorId === 'disruptions')?.normalizedValue).toBe(1)
     expect(betterLighting.routes.find((route) => route.routeId === 'route-c')?.eligible).toBe(false)
+    expect(betterLighting.explanation).toContain('Route B had the highest preference score among eligible routes and adds 4 minutes')
     expect(shortestWalk.recommendedRouteId).toBe('route-a')
+    expect(shortestWalk.explanation).toContain('Route A was selected as the only route within the zero-minute limit')
   })
 
   it('accepts a newly registered factor without changing the evaluator', () => {
@@ -78,6 +84,8 @@ describe('Waylit SDK', () => {
     expect(() => evaluateRoutes({ ...input, contexts: [{ routeId: 'route-a', factors: { lighting: Number.NaN } }, ...contexts.slice(1)] })).toThrow(/value/i)
     expect(() => evaluateRoutes({ ...input, contexts: [{ routeId: 'route-a', factors: { unregistered: 1 } }, ...contexts.slice(1)] })).toThrow(/unknown factor/i)
     expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], weightOverrides: { unknown: 1 } } })).toThrow(/override/i)
+    expect(() => evaluateRoutes({ ...input, factors: [null as unknown as FactorDefinition] })).toThrow(/factor definition/i)
+    expect(() => evaluateRoutes({ ...input, factors: [{ ...factors[0], bounds: null as unknown as FactorDefinition['bounds'] }] })).toThrow(/bounds/i)
   })
 
   it('breaks exact score ties by duration and then route ID deterministically', () => {
