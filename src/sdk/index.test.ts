@@ -92,6 +92,8 @@ describe('Waylit SDK', () => {
     expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], maxExtraMinutes: Number.POSITIVE_INFINITY } })).toThrow(/maxExtraMinutes/i)
     expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], weightOverrides: null as unknown as PreferencePreset['weightOverrides'] } })).toThrow(/weightOverrides/i)
     expect(() => evaluateRoutes({ ...input, contexts: [{ routeId: 'route-a', factors: { lighting: -1 } }, ...contexts.slice(1)] })).toThrow(/value/i)
+    expect(() => evaluateRoutes({ ...input, contexts: [{ routeId: 'route-a', factors: { lighting: Number.POSITIVE_INFINITY } }, ...contexts.slice(1)] })).toThrow(/value/i)
+    expect(() => evaluateRoutes({ ...input, factors: [factors[0], factors[0]] })).toThrow(/factor ID/i)
   })
 
   it('breaks exact score ties by duration and then route ID deterministically', () => {

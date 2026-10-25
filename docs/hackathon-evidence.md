@@ -1,6 +1,37 @@
 # Hackathon Evidence
 
-Evidence reviewed on 2026-10-24 for the `initial-setup` branch and open PR #1.
+Updated 2026-10-24 for the SDK release-candidate work on `feature/scenario-simulator`.
+PR #2 and the release-candidate follow-up PR #3 are merged. At the time of this check,
+`origin/main` was `6f14ac5`, which includes release-candidate commit `348dd02`.
+
+## Latest Kane CLI verification
+
+- Command: `KANE_CLI_USER_AGENT=codex kane-cli testmd run tests/kane/waylit-evidence-check_test.md --agent --headless`.
+- CLI: 0.10.0-rc.3, installed in an isolated prefix because the machine-wide 0.9.0 executable occupied its Homebrew link.
+- Result: passed; all 7 test steps passed in 126 seconds. The test verified the initial Better Lighting state (including Route B as BEST MATCH and Route C outside the 5-minute detour), no console errors, then Shortest Walk (Route A as BEST MATCH, Route B outside the zero-minute detour, and the no-environmental-superiority explanation).
+- Session: `c00faed4-2c57-4b72-ae58-2258e6776f3f`.
+- Evidence pack: `.testmuai/evidence/f9def97e-816f-4d10-9edf-b100e7da1dbe.evidence` (local and ignored by Git). `kane-cli evidence validate` returned `valid: true`, `status: finalized`, with no diagnostics. It contains per-step screenshots and console/network logs.
+- Kane also returned a Test Manager share URL and reported evidence ingest and bundle sync as successful. This was saved under the configured `KaneAI Generated / route_cause` project; team access was not independently verified, and this run was not submitted to the event team's Proof tab. `kanehack consent status` returned “not decided,” so no run summary was sent.
+
+### Scenario simulator run
+
+- Command, using the local app at `http://127.0.0.1:5173`:
+
+  ```sh
+  PATH="/tmp/waylit-kane-cli/node_modules/.bin:$PATH" \
+    KANE_CLI_USER_AGENT=codex kane-cli run "Open http://127.0.0.1:5173 and scroll to the Synthetic Route Scenario Simulator. Choose Road Closure. Verify Route B is labeled CLOSED · EXCLUDED and its reason says it was excluded before scoring, while Route C is the top match. Uncheck Route B is marked closed and verify Route B becomes the top match. Choose Incomplete Data. Verify Route B lighting is shown as stale with its last recorded 95% value, Route C open businesses is shown as unknown with no observation, and unknown data is not described as zero. Verify there are no browser console errors." \
+    --agent --headless --name waylit-scenario-smoke
+  ```
+
+- CLI: 0.10.0-rc.3.
+- Result: passed in 81.3 seconds. Kane verified the Road Closure case excluded Route B before scoring and recommended Route C; unchecking the closure made Route B top match; Incomplete Data displayed Route B lighting as stale (95%) and Route C open businesses as unknown rather than zero. Kane reported no browser errors.
+- Session: `4c4fe364-a866-41a8-a05c-f8e22c975ada`.
+- Evidence pack: `.testmuai/evidence/8c01bd74-eef2-4a8a-8c4f-caf6038a02ec.evidence` (local and ignored by Git). Validation returned `valid: true`, `status: finalized`, with no diagnostics. It contains simulator screenshots, an annotated screenshot, and console/network logs.
+- The named run generated a replayable test at `.testmuai/tests/waylit-scenario-smoke_test.md` and output at `.testmuai/tests/output-waylit-scenario-smoke/`; both are local Kane artifacts and are not tracked in Git.
+
+## Earlier evidence
+
+Evidence reviewed on 2026-10-24 for the `initial-setup` branch and PR #1.
 
 ## SDK and build checks
 

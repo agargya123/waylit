@@ -97,4 +97,4 @@ npm run test:consumer
 npm run dev
 ```
 
-The React demo is supporting evidence, not an SDK dependency. Its routes and observations are synthetic. It includes the evaluator and a synthetic scenario simulator; neither generates directions nor makes real-world safety claims. See the [hackathon browser evidence](https://github.com/agargya123/waylit/blob/main/docs/hackathon-evidence.md) for the limits of earlier demo verification.
+The React demo is supporting evidence, not an SDK dependency. Its routes and observations are synthetic. On the main screen, switch between Better Lighting and Shortest Walk; scroll down to compare synthetic scenarios and try the closure, detour, and incomplete-data controls. The demo calls the SDK evaluator and does not generate directions or make real-world safety claims. See the [hackathon browser evidence](https://github.com/agargya123/waylit/blob/feature/scenario-simulator/docs/hackathon-evidence.md) for recorded verification and its limits.
