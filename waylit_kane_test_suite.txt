@@ -1,0 +1,61 @@
+WAYLIT — KANE CLI BROWSER TEST SUITE
+====================================
+Target app: http://localhost:4173
+Run in PowerShell with the Waylit preview server already running.
+Prerequisite: kane-cli whoami
+
+PURPOSE
+-------
+Verify the multi-journey Waylit browser experience and produce verifiable Kane evidence.
+The commands below are individual test runs; a .txt file does not execute itself.
+To run the entire suite automatically and capture results, give the Codex prompt at the end of this file to Codex.
+
+IMPORTANT ASSERTION RULES
+-------------------------
+* New journeys: DO NOT hardcode which route wins. Derive assertions from displayed values and constraints.
+* Original SoMa to South Beach fixture: prior verified example was Route A 14 min for Shortest walk; Route B 19 min and 91% lighting for Better lighting. If the fixture was intentionally changed, update those expectations only after checking source code and commit history.
+* Synthetic observations must not be described as measured or as guarantees of safety.
+* Treat Kane's confirmed final verdict as authoritative, not an inferred success from the shell exit code alone.
+* Save exact Kane run links, timestamps, and failure details; never invent results.
+
+TEST 01 — MULTI-JOURNEY DATA BINDING
+-----------------------------------
+kane-cli run "Open Waylit. Select Ferry Building to Salesforce Park and verify that the origin, destination, route alternatives, and metrics belong to that journey. Select Civic Center to Patricia's Green and verify these values update to that journey. Then select Oracle Park to Ferry Building and verify the values update again. Confirm stale route-specific labels and metrics from the prior journey are not retained. Check that synthetic environmental data is clearly identified. Do not assert a specific winning route without checking the displayed scores." --url http://localhost:4173 --agent --name waylit-multijourney
+
+TEST 02 — CROSS-JOURNEY PREFERENCES
+-----------------------------------
+kane-cli run "Open Waylit. For Ferry Building to Salesforce Park, select Shortest walk and verify the recommended route has the minimum displayed walking duration. Select Better lighting and verify scores and explanation correspond to that preference and the recommended route meets the stated maximum detour. Repeat these checks for Civic Center to Patricia's Green and Oracle Park to Ferry Building. A winner need not change if the metrics do not justify it. Confirm each explanation refers to the currently selected journey's observations." --url http://localhost:4173 --agent --name waylit-cross-journey-preferences
+
+TEST 03 — ORIGINAL SCENARIO REGRESSION
+-------------------------------------
+kane-cli run "Open Waylit. Select the original SoMa to South Beach journey. Select Shortest walk and verify Route A is recommended at 14 minutes and Route B is outside the zero-minute detour limit. Select Better lighting and verify Route B is recommended at 19 minutes with 91 percent documented lighting and a five-minute detour. Verify Route C displays Open businesses unknown, not zero. Switch to another journey, then return and confirm the original recommendations and data are restored. Report discrepancies rather than changing the expected values." --url http://localhost:4173 --agent --name waylit-multijourney-regression
+
+TEST 04 — STATE ISOLATION / RAPID SWITCHING
+------------------------------------------
+kane-cli run "Open Waylit. Alternate between two supported journeys and between Better lighting and Shortest walk several times. After every switch verify the origin, destination, metrics, highlighted best-match card, detour eligibility, and explanation all describe the currently selected journey and preference, with no stale values or mixed journey data. Finish on Shortest walk and verify the displayed recommendation is the shortest eligible route." --url http://localhost:4173 --agent --name waylit-state-isolation
+
+TEST 05 — EXPLANATION CONSISTENCY
+--------------------------------
+kane-cli run "Open Waylit and visit at least two supported journeys. For both preferences, compare the recommended route's duration, documented lighting percentage, businesses metric, disruptions metric, and detour limit against the Why this route explanation. Flag any contradiction, fabricated certainty, or explanation that mentions a route or factor absent from the current journey. Unknown environmental observations must never be described as known-good conditions." --url http://localhost:4173 --agent --name waylit-explanation-consistency
+
+TEST 06 — ACCESSIBILITY / KEYBOARD FLOW
+--------------------------------------
+kane-cli run "Open Waylit. Use only keyboard interactions to navigate to the journey selector and preference controls. Select a different supported journey and change the preference. Confirm the controls have discernible labels, focus is visible, the recommendation and explanation update, and the interface can be used without a mouse. Report actual failures without assuming particular keyboard shortcuts." --url http://localhost:4173 --agent --name waylit-keyboard
+
+TEST 07 — SMALL VIEWPORT / RESPONSIVE
+-------------------------------------
+kane-cli run "Open Waylit. Resize the browser to an approximately 390 by 844 mobile viewport if the environment supports resizing. Verify that the journey selector, preference controls, route cards, BEST MATCH indicator, and Why this route explanation remain visible or reachable by scrolling; no horizontal overflow blocks use. Select a new journey and change preference on this viewport. If resizing is unsupported, report the test as blocked, not passed." --url http://localhost:4173 --agent --name waylit-responsive
+
+PRIORITY IF TIME IS SHORT
+-------------------------
+P0: Tests 01, 02, 03
+P1: Tests 04, 05
+P2: Tests 06, 07
+
+CODEX PROMPT — AUTOMATE THE ABOVE AND WRITE A REPORT
+----------------------------------------------------
+Read waylit_kane_test_suite.txt in the repository. Create a PowerShell runner scripts/run-kane-suite.ps1 that runs each listed kane-cli command sequentially against http://localhost:4173 and collects full stdout/stderr and the process exit code, with an overall per-test timeout and no false positives. Never trust only the process exit code: inspect the final Kane result and pass/fail indicators in its actual output. Because CLI output format can differ by version, first inspect one real Kane run and implement reliable parsing. Mark outcomes PASS, FAIL or INDETERMINATE (including timeout, authentication error, missing result, or unsupported interaction). Do not classify INDETERMINATE as PASS. Preserve full logs in kane-results/logs/ and generate kane-results/summary.md and kane-results/summary.json with test names, outcome, reasons, Kane evidence/share URLs when present, execution timestamp, and totals. Continue to the next test when one fails; display a concise summary at the end. Do not modify the application or its SDK. Keep authentication secrets out of logs and git. Ensure kane-results/ sensitive or bulky outputs are gitignored unless explicitly safe for submission. Run the suite and report actual results; if the environment cannot run Kane, create the runner and say so rather than inventing pass results.
+
+CODEX PROMPT — AUDIT LIGHTING PERCENTAGE CHANGE
+----------------------------------------------
+Inspect the current Waylit repository and available git history. I see lighting displayed as a percentage in the UI. Tell me exactly: (1) what the lighting input representation was originally (raw score, count, fraction, percent, or other), (2) what representation it uses now, (3) whether the value is synthetic and what 91% means, (4) whether any data conversion or normalization changed, (5) whether the display formatting alone changed, and (6) whether this changed recommendations or tests. Show specific file paths, relevant before/after code excerpts and commits/diffs if available. Trace the data path from fixture through normalization, scoring, and UI. Distinguish percentage of actual measured streetlighting from a synthetic illustrative indicator. Do not change code; report findings and gaps in available history.
