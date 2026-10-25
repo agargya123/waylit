@@ -1,16 +1,16 @@
 # Waylit SDK Contract — MVP v0.2
 
-**Status:** Agreed MVP contract.  
-**Goal:** A framework-independent TypeScript API for ranking supplied walking-route alternatives against supplied environmental observations.  
+**Status:** MVP contract. The package can be built and packed locally but has not been published to npm.
+**Goal:** A framework-independent TypeScript API for ranking supplied walking-route alternatives against supplied environmental observations.
 **Boundary:** No live maps, GIS feeds, tracking, safety guarantees, backend, plugin loader, or production package publishing in the MVP.
 
 ## 1. Intended developer usage
 
 ```ts
-import { evaluateRoutes } from '../src/sdk'
-import { contexts, factors, presets, routes } from '../src/sdk/example'
+import { evaluateRoutes, type EvaluationInput } from 'waylit'
 
-const result = evaluateRoutes({ routes, contexts, factors, preset: presets[0] })
+const input: EvaluationInput = { routes, contexts, factors, preset }
+const result = evaluateRoutes(input)
 
 console.log(result.recommendedRouteId)
 console.log(result.routes[0].factorResults)
@@ -124,7 +124,7 @@ export interface ScoringStrategy {
 export declare function evaluateRoutes(input: EvaluationInput, strategy?: ScoringStrategy): EvaluationResult;
 ```
 
-The input reuses the existing `Route` and `RouteContext` interfaces rather than defining a competing embedded-observation route type. The optional strategy argument preserves the existing `ScoringStrategy` seam. The React demo consumes the SDK but is not an SDK dependency.
+The input reuses the existing `Route` and `RouteContext` interfaces rather than defining a competing embedded-observation route type. The optional strategy argument preserves the existing `ScoringStrategy` seam. The React demo consumes the SDK but is not an SDK dependency. Import published-package consumers from `waylit`; demo fixture data is not part of the published package.
 
 ## 3. Behavior and policy decisions
 
@@ -137,6 +137,7 @@ The input reuses the existing `Route` and `RouteContext` interfaces rather than 
 ### Missing values — deliberately conservative MVP policy
 - `null` or absent key means **unknown**, never `0`, full coverage, or an assertion of danger/safety.
 - A factor with positive effective weight and unknown observation gets `normalizedValue: null`, `contribution: null`, and contributes nothing to evidence coverage.
+- The SDK has no freshness field. Callers should pass stale observations as `null` and preserve their timestamps/provenance in their own data model.
 - A route with any such missing observation has `score: null` and cannot win *on environmental scoring*. Return factor-level missingness and the weight-weighted `dataCoverage` separately. Ineligible routes are excluded before calling the scoring strategy; their score is null and `factorResults` is empty.
 - If at least one eligible route has complete weighted observations, the highest-scoring complete route may be selected. **If any eligible competitor is incomplete, mark the outcome `provisional`** and explain that unscored alternatives could change the result.
 - If no eligible route has complete weighted observations, return `status: 'insufficient_data'`, `recommendedRouteId: null`, except for the explicitly time-only shortest-walk case below.
@@ -157,6 +158,8 @@ The input reuses the existing `Route` and `RouteContext` interfaces rather than 
 - Must refer to evidence and preferences, e.g., `Route B had the highest weighted preference fit among eligible, fully observed routes; it adds 4 minutes. Route A lacked lighting evidence, so this comparison is provisional.`
 - Never output `safe`, `unsafe`, `risk-free`, or `95% safe` on the basis of these inputs.
 - All results deterministic given the same input.
+
+The evaluator requires at least one route, and `maxExtraMinutes` must be non-negative. Therefore at least the fastest route is always eligible; `insufficient_data` describes missing weighted evidence, not a case where every non-empty candidate violates the detour constraint.
 
 ## 4. Golden synthetic fixture
 
@@ -204,4 +207,4 @@ Expected: `betterLighting` recommends **Route B** (Route C is excluded on detour
 
 ## 7. Explicit non-goals
 
-No live routing provider integration, data adapters, backend, database, plugin loading, emergency tracking, certified safety labeling, multiple scoring strategies, or published package release required for MVP.
+No live routing provider integration, data adapters, backend, database, plugin loading, emergency tracking, or certified safety labeling. The package is ESM-only; CommonJS support is not provided.

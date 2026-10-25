@@ -1,50 +1,100 @@
 # Waylit
 
-Waylit is a small React demo backed by a framework-independent TypeScript route scoring SDK.
+**Beyond the shortest path.**
 
-## Start
+Waylit is an open-source, provider-agnostic TypeScript SDK for evaluating and ranking existing candidate routes using contextual observations and configurable policies. Give it routes, observations, and preferences; it returns eligibility, scores, a deterministic recommendation, and an explanation.
+
+Waylit is not a navigation engine: it does not generate routes, fetch live data, or depend on a mapping provider, React, a backend, or an AI service.
+
+## Installation status
+
+Waylit is **not currently published to npm**. To build and try the package locally:
 
 ```sh
-npm install
+git clone https://github.com/agargya123/waylit.git
+cd waylit
+npm ci
+npm run build:sdk
+npm pack
+mkdir ../waylit-consumer
+cd ../waylit-consumer
+npm init -y
+npm install ../waylit/waylit-0.1.0.tgz
+```
+
+The packed package is ESM and includes TypeScript declarations. It has no runtime dependencies. The evaluator targets ES2022; use a JavaScript runtime that supports ES modules and ES2022.
+
+## Quickstart
+
+After installing the package, import its public API from `waylit`:
+
+```ts
+import {
+  evaluateRoutes,
+  type FactorDefinition,
+  type PreferencePreset,
+  type Route,
+  type RouteContext,
+} from 'waylit'
+
+const routes: Route[] = [
+  { id: 'quiet', name: 'Quiet streets', durationMinutes: 10, description: 'A direct route.' },
+  { id: 'active', name: 'Active streets', durationMinutes: 12, description: 'Two minutes longer.' },
+]
+
+const factors: FactorDefinition[] = [
+  {
+    id: 'activity',
+    label: 'Street activity',
+    description: 'Observed activity on the route.',
+    direction: 'higher',
+    weight: 1,
+    bounds: { min: 0, max: 10 },
+  },
+]
+
+const contexts: RouteContext[] = [
+  { routeId: 'quiet', factors: { activity: 2 } },
+  { routeId: 'active', factors: { activity: 9 } },
+]
+
+const policy: PreferencePreset = {
+  id: 'prefer-activity',
+  label: 'Prefer activity',
+  description: 'Favor routes with higher observed activity.',
+  maxExtraMinutes: 3,
+}
+
+const result = evaluateRoutes({ routes, contexts, factors, preset: policy })
+const recommended = routes.find((route) => route.id === result.recommendedRouteId)
+
+console.log(recommended?.name) // "Active streets"
+console.log(result.explanation)
+// Active streets had the highest preference score among eligible routes and adds 2 minutes over the fastest route.
+```
+
+The example uses developer-supplied observations; it does not imply that Waylit collects or verifies them.
+
+## Policies, scores, and data
+
+- **Hard constraint:** `maxExtraMinutes` excludes routes that exceed the detour from the fastest candidate before any preference scoring. Excluded routes have no score and cannot be recommended.
+- **Soft preference:** factor `weight`, `direction` (`higher` or `lower`), and optional `weightOverrides` determine how eligible routes compare. Values are normalized against each factor's bounds; scores are preference-fit scores from 0 to 100, not probabilities or safety assessments.
+- **Missing observations:** use `null`, or omit a registered factor from that route's context. The SDK reports it as `unknown`; it is never treated as zero. An incomplete eligible route has no score if any positively weighted observation is missing. A recommendation based on another complete eligible route is `provisional`; if no complete route can be compared, status is `insufficient_data` and the recommendation is `null`—except a zero-detour policy can select a shortest route by duration, then route ID, while clearly marking the result provisional.
+- **Stale observations:** freshness is not part of the SDK input model. If your application considers a value stale, pass `null` to the evaluator and retain freshness/source metadata separately.
+- **Determinism:** identical input and strategy produce identical results. Equal scores break by shorter duration, then lexicographic route ID. A zero-detour policy restricts eligibility to the shortest-duration route(s).
+- **Validation:** malformed input throws an `Error` with a field-specific message. At least one route, unique non-empty route and factor IDs, finite in-bounds observations, positive total factor weight, and finite non-negative detour limits are required. Missing route contexts are allowed and mean all registered observations are unknown.
+
+See the [SDK contract](docs/sdk-contract.md) for the complete input/output behavior and validation rules.
+
+## Development and demo
+
+```sh
+npm ci
+npm test
+npm run typecheck
+npm run build
+npm run test:consumer
 npm run dev
 ```
 
-## Checks
-
-```sh
-npm test
-npm run build
-```
-
-## SDK usage
-
-The framework-independent SDK accepts routes, their environmental contexts, factor definitions, and a preference preset as one typed input. The React demo consumes the SDK; React is not an SDK dependency.
-
-```ts
-import { evaluateRoutes } from './src/sdk'
-import { contexts, factors, presets, routes } from './src/sdk/example'
-
-const result = evaluateRoutes({ routes, contexts, factors, preset: presets[0] })
-
-if (result.recommendedRouteId) {
-  const route = routes.find((item) => item.id === result.recommendedRouteId)
-  console.log(route?.name, result.explanation)
-}
-
-for (const routeResult of result.routes) {
-  console.log(routeResult.routeId, routeResult.score, routeResult.dataCoverage)
-  console.log(routeResult.factorResults)
-}
-```
-
-`status` is `recommended`, `provisional`, or `insufficient_data`. A route is scored only when all positively weighted observations are present; missing values remain `unknown`, produce a null route score, and reduce `dataCoverage`. Incomplete eligible alternatives make a recommendation provisional. The `maxExtraMinutes` constraint is applied before scoring, so excluded routes have no factor results and cannot be recommended. The shortest-walk preset selects only routes tied for the minimum duration and uses route ID as a deterministic fallback when no complete environmental score is available.
-
-Register a synthetic factor by adding a `FactorDefinition` and observations keyed by its ID in each route's `RouteContext`; the evaluator does not need changes. The default `weightedNormalizedScoring` strategy remains replaceable through the optional strategy argument. Scores are normalized preference fits, not safety probabilities. See [the SDK contract](docs/sdk-contract.md) for public types, validation, fixtures, missing-data behavior, and acceptance tests.
-
-## Hackathon evidence
-
-See [the browser test results and reproduction steps](docs/hackathon-evidence.md), including the limits of local evidence sharing.
-
-## Scope
-
-The demo uses synthetic route data only; it has no mapping integration, backend, persistence, plugin loader, or runtime dependency injection.
+The React demo is supporting evidence, not an SDK dependency. Its routes and observations are synthetic. It includes the evaluator and a synthetic scenario simulator; neither generates directions nor makes real-world safety claims. See the [hackathon browser evidence](https://github.com/agargya123/waylit/blob/main/docs/hackathon-evidence.md) for the limits of earlier demo verification.

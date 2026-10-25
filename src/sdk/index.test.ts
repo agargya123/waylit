@@ -86,6 +86,12 @@ describe('Waylit SDK', () => {
     expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], weightOverrides: { unknown: 1 } } })).toThrow(/override/i)
     expect(() => evaluateRoutes({ ...input, factors: [null as unknown as FactorDefinition] })).toThrow(/factor definition/i)
     expect(() => evaluateRoutes({ ...input, factors: [{ ...factors[0], bounds: null as unknown as FactorDefinition['bounds'] }] })).toThrow(/bounds/i)
+    expect(() => evaluateRoutes({ ...input, routes: [] })).toThrow(/at least one route/i)
+    expect(() => evaluateRoutes({ ...input, routes: [routes[0], routes[0]] })).toThrow(/route ID/i)
+    expect(() => evaluateRoutes({ ...input, contexts: [contexts[0], contexts[0]] })).toThrow(/duplicate context/i)
+    expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], maxExtraMinutes: Number.POSITIVE_INFINITY } })).toThrow(/maxExtraMinutes/i)
+    expect(() => evaluateRoutes({ ...input, preset: { ...presets[0], weightOverrides: null as unknown as PreferencePreset['weightOverrides'] } })).toThrow(/weightOverrides/i)
+    expect(() => evaluateRoutes({ ...input, contexts: [{ routeId: 'route-a', factors: { lighting: -1 } }, ...contexts.slice(1)] })).toThrow(/value/i)
   })
 
   it('breaks exact score ties by duration and then route ID deterministically', () => {
